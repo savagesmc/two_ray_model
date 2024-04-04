@@ -5,6 +5,28 @@ from scipy.constants import c
 import cmath
 import numpy as np
 import matplotlib.pyplot as plt
+import argparse
+
+
+# Distance units conversion
+
+def ft_to_m(val):
+	return val * 0.3048
+
+def m_to_ft(val):
+	return val * 3.28084
+
+def ft_to_nm(val):
+	return val * 0.000164579
+
+def nm_to_ft(val):
+	return val * 6076.12
+
+def m_to_nm(val):
+	return ft_to_nm(m_to_ft(val))
+
+def nm_to_m(val):
+	return nm_to_ft(ft_to_m(val))
 
 '''
 First define some methods that help compute the geometry of the two-ray model based on:
@@ -29,10 +51,10 @@ def d_1(d, ht, hr):
 
 
 def theta(d, ht, hr):
-  '''
-  Calculates the angle of reflection (relative to the ground)
-  '''
-  return atan2(ht*(1+ht/hr),d)
+	'''
+	Calculates the angle of reflection (relative to the ground)
+	'''
+	return atan2(ht*(1+ht/hr),d)
 
 
 def dPhase(d, ht, hr, f):
@@ -50,7 +72,7 @@ def dPhase(d, ht, hr, f):
 def dSpread(d, ht, hr):
 	'''
 	Calculates delay spread (difference in arrival time) between the main ray (los) and the
-  reflected ray - assuming the speed of light in a vaccuum.
+	reflected ray - assuming the speed of light in a vaccuum.
 	'''
 	return (d_1(d, ht, hr) - d_0(d, ht, hr))/c
 
@@ -58,13 +80,13 @@ def dSpread(d, ht, hr):
 # as models for other types of surfaces like sea water etc....
 perm_earth = 15
 def R(d, ht, hr):
-  '''
-  Calculates the reflection coefficient due to the angle of arrival of the reflectd
-  beam to the surface it is reflecting from.
-  '''
-  theta_ = theta(d, ht, hr)
-  Z = sqrt(perm_earth - cos(theta_)**2)
-  return (sin(theta_) - Z)/(sin(theta_)+Z)
+	'''
+	Calculates the reflection coefficient due to the angle of arrival of the reflectd
+	beam to the surface it is reflecting from.
+	'''
+	theta_ = theta(d, ht, hr)
+	Z = sqrt(perm_earth - cos(theta_)**2)
+	return (sin(theta_) - Z)/(sin(theta_)+Z)
 
 
 def two_ray(d_m, h_t, h_r, f, f_c=-1):
@@ -86,21 +108,21 @@ def two_ray_pl(d_m, h_t, h_r, f, f_c=-1, returnDb=True):
 	response = two_ray(d_m, h_t, h_r, f, f_c)
 	loss = response * response.conjugate()
 	if returnDb:
-		return -10*log10(loss)
+		return -10*log10(np.real(loss))
 	else:
 		return loss
 
-def wideband_two_ray(f_c, bw, d_m, h_t, h_r, returnDb=True, numSubBands=2048):
+def wideband_two_ray(f_c, bw, d_m, h_t, h_r, returnDb=True, numSubBands=128):
 	'''
 	Computes an aggregate frequency response taking into account a signal that is spead spectrum and
 	is able to account for frequency selective gains and losses across a wide bandwidth.
 	'''
 	# Assume some 'subbands', each of which have their own independent two-ray reflected beam
 	freqs = np.arange(f_c-bw/2, f_c+bw/2, bw/numSubBands)
-	freq_response = np.array([two_ray(d_m, h_t, h_r, f, f_c=f) for f in freqs])
+	freq_response = np.array([two_ray(d_m, h_t, h_r, f, f_c=f, returnDb=returnDb) for f in freqs])
 	return freqs, freq_response
 
-def wideband_two_ray_pl(f_c, bw, d_m, h_t, h_r, returnDb=True, numSubBands=2048, plotLabel=''):
+def wideband_two_ray_pl(f_c, bw, d_m, h_t, h_r, returnDb=True, numSubBands=128, plotLabel=''):
 	'''
 	Computes an aggregate path loss taking into account a signal that is spead spectrum and
 	is able to account for frequency selective gains and losses across a wide bandwidth.
@@ -118,48 +140,42 @@ def wideband_pl(f_c, bw, d_m, h_t, h_r, returnDb=True):
 
 if __name__ == "__main__":
 
-	bw = 56e6
-	ht1 = 9
-	ht2 = 13.7
-	hr = 3810
-	f = 1815e6
+    parser = argparse.ArgumentParser(
+                    prog='twoRay.py',
+                    description='Computes path loss using the simple two-ray multipath model')
 
-	# Used to debug above routines
-	dist = np.arange(1000, 60000, 100)
+    parser.add_argument('-bw', '--bandwidth', help='bandwidth of signal (hz)', type=float, default=1e6)
+    parser.add_argument('-fc', '--center_freq', help='center frequency of signal (hz)', type=float, default=1e9)
+    parser.add_argument('-ht', '--transmitter_height', help='height of transmitter (ft)', type=float, default=10000)
+    parser.add_argument('-hr', '--receiver_height', help='height of receiver (ft)', type=float, default=10000)
+    parser.add_argument('-g', '--ground_height', help='ground height above sea level (ft)', type=float, default=0)
 
-	plt.plot(dist, [dSpread(dd, ht2, hr) for dd in dist])
-	plt.title(f'Delay Spread vs distance @ {f/1e6} MHz')
-	plt.ylabel('Delay (s)')
-	plt.xlabel('Distance from base (m)')
-	#plt.ylim(0, 5e-8)
-	#plt.xlim(0, 2500)
-	plt.show()
+    parser.add_argument('-ds', '--start_distance', help='start distance (nautical miles)', type=float, default=0.01)
+    parser.add_argument('-de', '--end_distance', help='end distance (nautical miles)', type=float, default=50)
+    parser.add_argument('-N', '--num_points', help='number of plot points', type=int, default=1000)
+    parser.add_argument('-t', '--threshold', help='threshold path-loss (dB) ', type=float, default=-1)
 
-	ph_t_r = [dPhase(dd, ht2, hr, f) for dd in dist]
-	plt.plot(dist, ph_t_r, label='Tx-Rx')
-	plt.title(f'Delta phase vs distance @ {f/1e6} MHz')
-	plt.ylabel('Phase')
-	plt.xlabel('Distance from base (m)')
-	plt.legend()
-	plt.show()
 
-	for dis in [40000, 41000, 42000]:
-		freqs, response = wideband_two_ray(f, bw, dis, ht1, hr)
-		plt.plot(freqs, np.abs(response), label=f'ht = {ht1}, hr = {hr}, freq response @ d = {dis} m')
-	plt.legend()
-	plt.show()
+    args = parser.parse_args()
 
-	loss_v_d_1 = np.array([wideband_pl(f, bw, d, ht1, hr) for d in dist])
-	loss_v_d_2 = np.array([wideband_pl(f, bw, d, ht2, hr) for d in dist])
-	plt.plot(dist, loss_v_d_1, label=f'two-ray pathloss (fc = {f}, ht = {ht1}m, hr={hr}m)')
-	plt.plot(dist, loss_v_d_2, label=f'two-ray pathloss (fc = {f}, ht = {ht2}m, hr={hr}m)')
-	plt.ylabel('Path loss (dB)')
-	plt.xlabel('Distance from base (m)')
-	plt.legend()
-	plt.show()
+    bw = args.bandwidth
+    f = args.center_freq
+    base = args.ground_height
+    ht = args.transmitter_height
+    hr = args.receiver_height
 
-	x = wideband_two_ray_pl(f, 56e6, 10e3, 15e3, 15e3, plotLabel='d=10000, alt=15k')
-	x = wideband_two_ray_pl(f, 56e6, 10100, 15e3, 15e3, plotLabel='d=10100, alt=15k')
-	x = wideband_two_ray_pl(f, 56e6, 10500, 15e3, 15e3, plotLabel='d=10500, alt=15k')
-	plt.legend()
-	plt.show()
+    numPoints = args.num_points
+    delta=(args.end_distance - args.start_distance)/numPoints
+    nm_dist = np.arange(args.start_distance, args.end_distance, delta)
+    dist = nm_to_m(nm_dist)
+    ht_m = ft_to_m(ht - base)
+    hr_m = ft_to_m(hr - base)
+    loss_v_d_2 = np.array([wideband_pl(f, bw, d, ht_m, hr_m) for d in dist])
+    plt.plot(nm_dist, loss_v_d_2, label=f'two-ray pathloss (fc = {f}, ht = {ht} ft MSL, hr={hr} ft MSL)')
+    if args.threshold > 0:
+        plt.axhline(args.threshold, color='black')
+    plt.ylabel('Path loss (dB)')
+    plt.xlabel('Distance from base (m)')
+    plt.legend()
+    plt.show()
+
