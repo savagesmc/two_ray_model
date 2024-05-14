@@ -28,6 +28,7 @@ def m_to_nm(val):
 def nm_to_m(val):
 	return nm_to_ft(ft_to_m(val))
 
+
 '''
 First define some methods that help compute the geometry of the two-ray model based on:
 1. Height of transmitter (ht)
@@ -76,6 +77,7 @@ def dSpread(d, ht, hr):
 	'''
 	return (d_1(d, ht, hr) - d_0(d, ht, hr))/c
 
+
 # Assume fixed permittivity of earth, however a frequency dependent one could be used, as well
 # as models for other types of surfaces like sea water etc....
 perm_earth = 15
@@ -112,6 +114,7 @@ def two_ray_pl(d_m, h_t, h_r, f, f_c=-1, returnDb=True):
 	else:
 		return loss
 
+
 def wideband_two_ray(f_c, bw, d_m, h_t, h_r, returnDb=True, numSubBands=128):
 	'''
 	Computes an aggregate frequency response taking into account a signal that is spead spectrum and
@@ -121,6 +124,7 @@ def wideband_two_ray(f_c, bw, d_m, h_t, h_r, returnDb=True, numSubBands=128):
 	freqs = np.arange(f_c-bw/2, f_c+bw/2, bw/numSubBands)
 	freq_response = np.array([two_ray(d_m, h_t, h_r, f, f_c=f, returnDb=returnDb) for f in freqs])
 	return freqs, freq_response
+
 
 def wideband_two_ray_pl(f_c, bw, d_m, h_t, h_r, returnDb=True, numSubBands=128, plotLabel=''):
 	'''
@@ -134,9 +138,11 @@ def wideband_two_ray_pl(f_c, bw, d_m, h_t, h_r, returnDb=True, numSubBands=128, 
 		plt.plot(freqs, pls, label=plotLabel)
 	return pls
 
+
 def wideband_pl(f_c, bw, d_m, h_t, h_r, returnDb=True):
 	p = wideband_two_ray_pl(f_c, bw, d_m, h_t, h_r, returnDb=returnDb)
 	return np.average(p)
+
 
 if __name__ == "__main__":
 
@@ -155,6 +161,7 @@ if __name__ == "__main__":
     parser.add_argument('-N', '--num_points', help='number of plot points', type=int, default=1000)
     parser.add_argument('-t', '--threshold', help='threshold path-loss (dB) ', type=float, default=-1)
 
+    parser.add_argument('-E', '--permittivity', help=f'Relative permittivity (default = {perm_earth})', type=float, default=perm_earth)
 
     args = parser.parse_args()
 
@@ -163,6 +170,7 @@ if __name__ == "__main__":
     base = args.ground_height
     ht = args.transmitter_height
     hr = args.receiver_height
+    perm_earth = args.permittivity
 
     numPoints = args.num_points
     delta=(args.end_distance - args.start_distance)/numPoints
