@@ -28,6 +28,9 @@ def m_to_nm(val):
 def nm_to_m(val):
 	return nm_to_ft(ft_to_m(val))
 
+def nm_to_km(val):
+	return nm_to_m(val) / 1000.
+
 
 '''
 First define some methods that help compute the geometry of the two-ray model based on:
@@ -151,15 +154,17 @@ if __name__ == "__main__":
                     description='Computes path loss using the simple two-ray multipath model')
 
     parser.add_argument('-bw', '--bandwidth', help='bandwidth of signal (hz)', type=float, default=1e6)
-    parser.add_argument('-fc', '--center_freq', help='center frequency of signal (hz)', type=float, default=1e9)
-    parser.add_argument('-ht', '--transmitter_height', help='height of transmitter (ft)', type=float, default=10000)
-    parser.add_argument('-hr', '--receiver_height', help='height of receiver (ft)', type=float, default=10000)
-    parser.add_argument('-g', '--ground_height', help='ground height above sea level (ft)', type=float, default=0)
+    parser.add_argument('-fc', '--center-freq', help='center frequency of signal (hz)', type=float, default=1e9)
+    parser.add_argument('-ht', '--transmitter-height', help='height of transmitter (ft)', type=float, default=10000)
+    parser.add_argument('-hr', '--receiver-height', help='height of receiver (ft)', type=float, default=10000)
+    parser.add_argument('-g', '--ground-height', help='ground height above sea level (ft)', type=float, default=0)
 
-    parser.add_argument('-ds', '--start_distance', help='start distance (nautical miles)', type=float, default=0.01)
-    parser.add_argument('-de', '--end_distance', help='end distance (nautical miles)', type=float, default=50)
-    parser.add_argument('-N', '--num_points', help='number of plot points', type=int, default=1000)
-    parser.add_argument('-t', '--threshold', help='threshold path-loss (dB) ', type=float, default=-1)
+    parser.add_argument('-ds', '--start-distance', help='start distance (nautical miles)', type=float, default=0.01)
+    parser.add_argument('-de', '--end-distance', help='end distance (nautical miles)', type=float, default=50)
+    parser.add_argument('--step-distance', help='distance for each plot - default = [start, end)', type=float, default=-1)
+    parser.add_argument('-N', '--num-points', help='number of plot points', type=int, default=1000)
+    parser.add_argument('-t', '--threshold', help='threshold path-loss (dB) ', type=float, default=[], action="append")
+    parser.add_argument('-km', help='distance in km instead of nautical miles', action="store_true")
 
     parser.add_argument('-E', '--permittivity', help=f'Relative permittivity (default = {perm_earth})', type=float, default=perm_earth)
 
@@ -172,18 +177,32 @@ if __name__ == "__main__":
     hr = args.receiver_height
     perm_earth = args.permittivity
 
-    numPoints = args.num_points
-    delta=(args.end_distance - args.start_distance)/numPoints
-    nm_dist = np.arange(args.start_distance, args.end_distance, delta)
-    dist = nm_to_m(nm_dist)
-    ht_m = ft_to_m(ht - base)
-    hr_m = ft_to_m(hr - base)
-    loss_v_d_2 = np.array([wideband_pl(f, bw, d, ht_m, hr_m) for d in dist])
-    plt.plot(nm_dist, loss_v_d_2, label=f'two-ray pathloss (fc = {f}, ht = {ht} ft MSL, hr={hr} ft MSL)')
-    if args.threshold > 0:
-        plt.axhline(args.threshold, color='black')
-    plt.ylabel('Path loss (dB)')
-    plt.xlabel('Distance from base (m)')
-    plt.legend()
-    plt.show()
+    start_ = args.start_distance
+    end_ = args.end_distance if (args.step_distance == -1) else start_+args.step_distance
+
+    def doPlot(args, start, end):
+        numPoints = args.num_points
+        print(f"{start}, {end}, {numPoints}")
+        delta=(end - start)/numPoints
+        nm_dist = np.arange(start, end, delta)
+        km_dist = nm_to_km(nm_dist)
+        dist = nm_to_m(nm_dist)
+        plot_dist = km_dist if args.km else nm_dist
+        dist_label = "km" if args.km else "nm"
+        ht_m = ft_to_m(ht - base)
+        hr_m = ft_to_m(hr - base)
+        loss_v_d_2 = np.array([wideband_pl(f, bw, d, ht_m, hr_m) for d in dist])
+        plt.plot(plot_dist, loss_v_d_2, label=f'two-ray pathloss (fc = {f}, ht = {ht} ft MSL, hr={hr} ft MSL)')
+        if args.threshold:
+            for t in args.threshold:
+                plt.axhline(t, color='black')
+        plt.ylabel('Path loss (dB)')
+        plt.xlabel(f'Distance from base ({dist_label})')
+        plt.legend()
+        plt.show()
+
+    while end_ <= args.end_distance:
+        doPlot(args, start_, end_)
+        start_ += args.step_distance/2 if (args.step_distance != -1) else 0
+        end_ += args.step_distance/2 if (args.step_distance != -1) else 1
 
