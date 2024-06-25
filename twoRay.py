@@ -6,6 +6,7 @@ import cmath
 import numpy as np
 import matplotlib.pyplot as plt
 import argparse
+import sys
 
 
 # Distance units conversion
@@ -165,6 +166,7 @@ if __name__ == "__main__":
     parser.add_argument('-N', '--num-points', help='number of plot points', type=int, default=1000)
     parser.add_argument('-t', '--threshold', help='threshold path-loss (dB) ', type=float, default=[], action="append")
     parser.add_argument('-km', help='distance in km instead of nautical miles', action="store_true")
+    parser.add_argument('--plot-envelope', help='Plot envelope of signal rather than actual signal', action="store_true")
 
     parser.add_argument('-E', '--permittivity', help=f'Relative permittivity (default = {perm_earth})', type=float, default=perm_earth)
 
@@ -179,10 +181,47 @@ if __name__ == "__main__":
 
     start_ = args.start_distance
     end_ = args.end_distance if (args.step_distance == -1) else start_+args.step_distance
+        
+    from scipy.signal import hilbert
+    from scipy.signal import butter, lfilter
 
+    def butter_lowpass(cutOff, fs=1., order=5):
+        nyq = 0.5 * fs
+        normalCutoff = cutOff / nyq
+        b, a = butter(order, normalCutoff, btype='low', analog = True)
+        return b, a
+
+    def butter_lowpass_filter(data, cutOff, fs=1., order=4):
+        b, a = butter_lowpass(cutOff, fs, order=order)
+        y = lfilter(b, a, data)
+        return y
+
+    def envelope(signal, x_axis, nseg=50):
+        res = []
+        res_x = []
+        skip = len(signal)//nseg
+        for s in range(0, len(signal), skip):
+            sig = signal[s:s+skip]
+            x = x_axis[s:s+skip]
+            pairs = [(sig[i], x[i]) for i in range(len(sig))]
+            n_pts = max(2, len(sig)//10)
+            sortVals = sorted(pairs, key = lambda val: val[0], reverse=True)[:n_pts]
+            result = sorted(sortVals, key=lambda val: val[1])
+            envSig = [r[0] for r in result]
+            envX = [r[1] for r in result]
+            res.extend(envSig)
+            res_x.extend(envX)
+        res = np.array(res)
+        res_x = np.array(res_x)
+        from scipy.interpolate import make_interp_spline, BSpline
+        # 300 represents number of points to make between min and max
+        xnew = np.linspace(res_x.min(), res_x.max(), 1000) 
+        spl = make_interp_spline(res_x, res, k=3)  # type: BSpline
+        res_smooth = spl(xnew)
+        return res_smooth, xnew
+        
     def doPlot(args, start, end):
         numPoints = args.num_points
-        print(f"{start}, {end}, {numPoints}")
         delta=(end - start)/numPoints
         nm_dist = np.arange(start, end, delta)
         km_dist = nm_to_km(nm_dist)
@@ -192,7 +231,11 @@ if __name__ == "__main__":
         ht_m = ft_to_m(ht - base)
         hr_m = ft_to_m(hr - base)
         loss_v_d_2 = np.array([wideband_pl(f, bw, d, ht_m, hr_m) for d in dist])
-        plt.plot(plot_dist, loss_v_d_2, label=f'two-ray pathloss (fc = {f}, ht = {ht} ft MSL, hr={hr} ft MSL)')
+        if args.plot_envelope:
+            env, envX = envelope(loss_v_d_2, plot_dist)
+            plt.plot(envX, env, label=f'two-ray pathloss envelope (fc = {f}, ht = {ht} ft MSL, hr={hr} ft MSL)')
+        else:
+            plt.plot(plot_dist, loss_v_d_2, label=f'two-ray pathloss (fc = {f}, ht = {ht} ft MSL, hr={hr} ft MSL)')
         if args.threshold:
             for t in args.threshold:
                 plt.axhline(t, color='black')
