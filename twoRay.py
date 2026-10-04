@@ -57,9 +57,9 @@ def d_1(d, ht, hr):
 
 def theta(d, ht, hr):
 	'''
-	Calculates the angle of reflection (relative to the ground)
+	Calculates the grazing angle of the ray reflected off flat ground
 	'''
-	return atan2(ht*(1+ht/hr),d)
+	return atan2(ht + hr, d)
 
 
 def dPhase(d, ht, hr, f):
